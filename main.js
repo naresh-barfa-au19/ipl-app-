@@ -1,9 +1,11 @@
 const express = require('express')
 const app = express()
 const csv = require('csv-parser');
+const csvFile=require('csvtojson')
+const BBBfile = "./Ball_By_Ball.csv"
+
 const fs = require('fs');
 const mongoose = require('mongoose');
-const { strict } = require('assert');
 
 
 mongoose.connect('mongodb://localhost/csv_db', {
@@ -215,21 +217,21 @@ db.on('connected', async () => {
 });
 
 var BBBSchema = new Schema({
-    MatcH_id: Number,
-    Over_id: Number,
-    Ball_id: Number,
-    Innings_No: Number,
+    MatcH_id: String,
+    Over_id: String,
+    Ball_id: String,
+    Innings_No: String,
     Team_Batting: String,
     Team_Bowling: String,
-    Striker_Batting_Position: Number,
+    Striker_Batting_Position: String,
     Extra_Type: String,
-    Runs_Scored: Number,
-    Extra_runs: Number,
-    Wides: Number,
-    Legbyes: Number,
-    Byes: Number, Noballs: Number,
-    Penalty: Number,
-    Bowler_Extras: Number,
+    Runs_Scored: String,
+    Extra_runs: String,
+    Wides: String,
+    Legbyes: String,
+    Byes: String, Noballs: String,
+    Penalty: String,
+    Bowler_Extras: String,
     Out_type: String,
     Caught: Boolean,
     Bowled: Boolean,
@@ -242,26 +244,26 @@ var BBBSchema = new Schema({
     ObstructingFeild: Boolean,
     Bowler_Wicket: Boolean,
     Match_Date: Date,
-    Season: Number,
-    Striker: Number,
-    Non_Striker: Number,
-    Bowler: Number,
+    Season: String,
+    Striker: String,
+    Non_Striker: String,
+    Bowler: String,
     Player_Out: String,
     Fielders: String,
-    Striker_match_SK: Number,
-    StrikerSK: Number,
-    NonStriker_match_SK: Number,
-    NONStriker_SK: Number,
-    Fielder_match_SK: Number,
-    Fielder_SK: Number,
-    Bowler_match_SK: Number,
-    BOWLER_SK: Number,
-    PlayerOut_match_SK: Number,
-    BattingTeam_SK: Number,
-    BowlingTeam_SK: Number,
+    Striker_match_SK: String,
+    StrikerSK: String,
+    NonStriker_match_SK: String,
+    NONStriker_SK: String,
+    Fielder_match_SK: String,
+    Fielder_SK: String,
+    Bowler_match_SK: String,
+    BOWLER_SK: String,
+    PlayerOut_match_SK: String,
+    BattingTeam_SK: String,
+    BowlingTeam_SK: String,
     Keeper_Catch: Boolean,
-    Player_out_sk: Number,
-    MatchDateSK: Number
+    Player_out_sk: String,
+    MatchDateSK: String
 
 })
 
@@ -270,24 +272,18 @@ var BBBSchema = new Schema({
 const BBBModel = mongoose.model('BBBModel', BBBSchema);
 
 
-db.on('connected', async () => {
-    const BBBModelData = await BBBModel.find({})
-    if (!BBBModelData.length) {
-        const arryData = await fs.readFileSync('Ball_By_Ball.csv')
-        let newArr = []
-        for (let i = 1; i < arryData.length + 1; i = i + 5000) {
-            let k = i - 1
-            newArr = arryData.slice(k, k + 5000)
-        }
-        console.log(newArr.length)
-        newArr.forEach(async (item, index) => {
-            await BBBModel.insertMany([item], (err, res) => {
-                if (err) throw err;
-                if (res) {
-                    console.log("Batch ", index, " Added to DB");
-                }
-            });
-        })
+db.once('open', async () => {
+    const BBBModelData = await BBBModel.countDocuments({})
+    if (!BBBModelData) {
+        csvFile()
+        .fromFile(BBBfile)
+        .then(async jsonObj => {
+            
+          
+            await BBBModel.insertMany(jsonObj)
+            console.log("Item  Inserted")
+        }).then(res => console.log("Delivries Data Added to Delivries Schema"))
+        .catch(err => console.log(err));
     } else {
         console.log("Data Already Available Ball BY Ball collection:)")
     }
