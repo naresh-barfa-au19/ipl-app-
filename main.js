@@ -73,8 +73,8 @@ var PlayerSchema = new Schema({
 const PlayerModel = mongoose.model('PlayerModel', PlayerSchema);
 
 db.on('connected', async () => {
-    const teamModelData = await TeamModel.find({})
-    if (!teamModelData.length) {
+    const teamModelData = await TeamModel.countDocuments()
+    if (!teamModelData) {
         fs.createReadStream('Team.csv')
             .pipe(csv())
             .on('data', async (csvTeamData) => {
@@ -96,8 +96,8 @@ db.on('connected', async () => {
 
 
 db.on('connected', async () => {
-    const PlayerModelData = await PlayerModel.find({})
-    if (!PlayerModelData.length) {
+    const PlayerModelData = await PlayerModel.countDocuments()
+    if (!PlayerModelData) {
         fs.createReadStream('Player.csv')
             .pipe(csv())
             .on('data', async (csvPlayerData) => {
@@ -146,8 +146,8 @@ const PlayerMatchModel = mongoose.model('PlayerMatchModel', PlayerMatchSchema);
 
 
 db.on('connected', async () => {
-    const PlayerMatchModelData = await PlayerMatchModel.find({})
-    if (!PlayerMatchModelData.length) {
+    const PlayerMatchModelData = await PlayerMatchModel.countDocuments()
+    if (!PlayerMatchModelData) {
         fs.createReadStream('Player_match.csv')
             .pipe(csv())
             .on('data', async (csvPlayerMatchData) => {
@@ -192,8 +192,8 @@ const MatchModel = mongoose.model('MatchModel', MatchSchema);
 
 
 db.on('connected', async () => {
-    const MatchModelData = await MatchModel.find({})
-    if (!MatchModelData.length) {
+    const MatchModelData = await MatchModel.countDocuments()
+    if (!MatchModelData) {
         fs.createReadStream('Match.csv')
             .pipe(csv())
             .on('data', async (csvMatchData) => {
@@ -294,8 +294,12 @@ db.once('open', async () => {
 
 
 
-app.get("/", (req, res) => {
-    res.status(200).send(`<h1>hello world</h1>`)
+app.get("/teamId/:teamId", async(req, res) => {
+    const teamModelData = await TeamModel.find({Team_Id:req.params.teamId},{Team_SK:0,__v:0}).sort({Team_Id:1})
+    console.log("home router",teamModelData)
+    res.status(200).send(teamModelData)
+
+
 })
 
 
