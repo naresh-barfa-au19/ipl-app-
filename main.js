@@ -1,304 +1,182 @@
 const express = require('express')
 const app = express()
-const csv = require('csv-parser');
-const csvFile=require('csvtojson')
-const BBBfile = "./Ball_By_Ball.csv"
 
-const fs = require('fs');
-const mongoose = require('mongoose');
+// all model are required here 
+const {TeamModel} = require("./schema/TeamSchema")
+const {PlayerMatchModel} = require("./schema/PlayerMatchSchema")
+const {PlayerModel} = require("./schema/PlayerSchema")
+const {MatchModel} = require("./schema/MatchSchema")
+const {BBBModel} = require("./schema/BallByBallSchema")
+// database required here
+require("./database");
+ 
 
 
-mongoose.connect('mongodb://localhost/csv_db', {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    useFindAndModify: false,
-    useCreateIndex: true
+
+app.get("/",(req,res)=>{
+    res.status(200).send(`<h1>welcome home</h1>`)
 })
 
-var db = mongoose.connection;
-
-db.on('error', console.error.bind(console, 'MongoDB connection error:'));
 
 
-var Schema = mongoose.Schema;
+app.get("/team/teamId/:teamId", async(req, res) => {
+    let teamData=[];
+    if(req.params.teamId>=1&&req.params.teamId<=12){
 
-var TeamSchema = new Schema({
-    Team_SK: {
-        type: Number,
-        required: true
-    },
-    Team_Id: {
-        type: Number,
-        required: true
-    },
-    Team_Name: {
-        type: String,
-        required: true
-    }
-});
+         teamData = await TeamModel.find({Team_Id:req.params.teamId},{Team_SK:0,__v:0}).sort({Team_Id:1})
+        }else{
+            teamData=[{
+                message:"there are only 12 IPL teams",
+                error:"incorrect teamId ..."
+            }]
+        }
+        res.status(200).send(teamData)
+        console.log("home router :):",teamData)
 
-const TeamModel = mongoose.model('TeamModel', TeamSchema);
 
-var PlayerSchema = new Schema({
-    PLAYER_SK: {
-        type: Number,
-        required: true
-    },
-    Player_Id: {
-        type: Number,
-        required: true
-    },
-    Player_Name: {
-        type: String,
-        required: true
-    },
-    DOB: {
-        type: Date,
-        required: true
-    },
-    Batting_hand: {
-        type: String,
-        required: true
-    },
-    Bowling_skill: {
-        type: String,
-        required: true
-    },
-    Country_Name: {
-        type: String,
-        required: true
-    }
 })
 
-const PlayerModel = mongoose.model('PlayerModel', PlayerSchema);
+app.get("/playerMatch/playerId/:playerId",async (req,res)=>{
+    //const playerMatchdata = await PlayerMatchModel.find({Player_Id:req.params.playerId},{Player_Id:1,Player_Name:1,Player_team:1,Season_year:1, _id: 0}).sort({Player_Id:1})
+    const playerMatchdataAgg =await PlayerMatchModel.aggregate([
+        {$match:{
+            Player_Id:parseInt(req.params.playerId)
+        }},
+        {$group :
+            {
+                _id:{
+    
+                    Player_Name:"$Player_Name",
+                    Player_team:"$Player_team",
+                    Season_year:"$Season_year"
+                }
+        }},{
+            $sort : { Season_year: 1 }
+        }
+    ])
 
-db.on('connected', async () => {
-    const teamModelData = await TeamModel.countDocuments()
-    if (!teamModelData) {
-        fs.createReadStream('Team.csv')
-            .pipe(csv())
-            .on('data', async (csvTeamData) => {
+    const playerData = await PlayerModel.findOne({Player_Id:req.params.playerId})
+    // const filtredPlayerMatchData = playerMatchdata.filter(a => {
+    //     return !this[a.Season_year] && (this[a.Season_year] = true);
+    // }, Object.create(null));
+    res.status(200).send({
+      // playerMatchdata,
+      playerMatchdataAgg,
+        playerData,
+    })
+    console.log("playerMatch API :):",parseInt(req.params.playerId))
 
-                await TeamModel.insertMany([csvTeamData], (err, res) => {
-                    if (err) throw err;
-                    if (res) {
-                        console.log(`Inserted: ${res.insertedCount}  ${csvTeamData.Team_Id} rows`);
-                    }
-                });
+})
+
+app.get("/ballbyball/matchId/:matchId/inningId/:inningId",async(req,res)=>{
+    const matchId = req.params.matchId.toString()
+    // const BallByBallData = await BBBModel.aggregate([
+    //     {
+    //         $match:{
+    //             MatcH_id: matchId,
+    //             Innings_No: req.params.inningId.toString()
+    //          }
+    //         },
+    //         {
+    //             $group: {
+    //                 _id: {
+    //                     Over_id: "$Over_id",
+    //                     Innings_No: "$Innings_No",
+    //                     Runs_Scored: "$Runs_Scored"
+    //                 }
+    //             }
+    //         },
+    //         {
+    //         $project:{
+    //             totalScore: {
+    //                 $sum: {
+    //                     $toDouble: "$Runs_Scored"
+    //                 }
+    //             }
+    //         }
+    //     }
+    // ])
+    const BBBData = await BBBModel.find(
+        {MatcH_id: matchId,
+        Innings_No: req.params.inningId.toString()},
+        {
+            Over_id:1,
+            Innings_No:1,
+            Runs_Scored:1
+        })
+       
+
+            const  total_run = BBBData.filter( item =>item.Innings_No === req.params.inningId).map(item=>parseInt(item.Runs_Scored)).reduce((a,b)=>a+b ,0)
+           // console.log(total_run)
+          // console.log(BBBData)
+          let perOverRunArr =[]
+        for (let i = 1; i <=20; i++) {
+            var perOverRun = BBBData.filter(item =>item.Over_id === i.toString()).map(item => parseInt(item.Runs_Scored)).reduce((a,b) => a + b, 0)
+            perOverRunArr.push({
+                overId: i,
+                runs: perOverRun,
+                inningId: req.params.inningId
             })
-            .on('end', () => {
-                console.log('CSV file successfully processed');
-            });
-    } else {
-        console.log("Data Already Available team :)")
-    }
-});
+           // console.log(i, i.toString(),perOverRun)
+        }
+        console.log(perOverRunArr)
 
 
-db.on('connected', async () => {
-    const PlayerModelData = await PlayerModel.countDocuments()
-    if (!PlayerModelData) {
-        fs.createReadStream('Player.csv')
-            .pipe(csv())
-            .on('data', async (csvPlayerData) => {
 
-                await PlayerModel.insertMany([csvPlayerData], (err, res) => {
-                    if (err) throw err;
-                });
-                console.log("data sent to csv db player")
-            })
-            .on('end', () => {
-                console.log('CSV file successfully processed');
-            });
-    } else {
-        console.log("Data Already Available player collection:)")
-    }
-});
-
-
-var PlayerMatchSchema = new Schema({
-    Player_match_SK: Number,
-    PlayerMatch_key: Number,
-    Match_Id: Number,
-    Player_Id: Number,
-    Player_Name: String,
-    DOB: Date,
-    Batting_hand: String,
-    Bowling_skill: String,
-    Country_Name: String,
-    Role_Desc: String,
-    Player_team: String,
-    Opposit_Team: String,
-    Season_year: Number,
-    is_manofThematch: Boolean,
-    Age_As_on_match: Number,
-    IsPlayers_Team_won: Boolean,
-    Batting_Status: String,
-    Bowling_Status: String,
-    Player_Captain: String,
-    Opposit_captain: String,
-    Player_keeper: String,
-    Opposit_keeper: String
-
+        const MatchDetailData = await MatchModel.find({match_id: parseInt(req.params.matchId) })
+    res.status(200).send({
+        MatchDetailData,
+       // BallByBallData,
+       BBBData,
+       perOverRunArr,
+       Total_Run : total_run,
+    })
+    console.log("ball by ball API :):",req.params.matchId,typeof(req.params.inningId),req.params.inningId)
 })
 
-const PlayerMatchModel = mongoose.model('PlayerMatchModel', PlayerMatchSchema);
-
-
-db.on('connected', async () => {
-    const PlayerMatchModelData = await PlayerMatchModel.countDocuments()
-    if (!PlayerMatchModelData) {
-        fs.createReadStream('Player_match.csv')
-            .pipe(csv())
-            .on('data', async (csvPlayerMatchData) => {
-
-                await PlayerMatchModel.insertMany([csvPlayerMatchData], (err, res) => {
-                    if (err) throw err;
-                    if (res) {
-                        console.log("data inserted in database");
-                    }
-                });
-            })
-            .on('end', () => {
-                console.log('CSV file successfully processed');
-            });
-    } else {
-        console.log("Data Already Available player match collection:)")
+app.get("/pagination", async (req,res)=>{
+    const page = parseInt(req.query.page)
+    const limit = parseInt(req.query.limit)
+    const totalDocs = await MatchModel.find({}).countDocuments()
+    const startIndex = (page -1)*limit
+    const lastIndex = page*limit
+    const result = {}
+    const lst =((totalDocs/limit) +1)
+    const skip= (page-1)*limit
+    //console.log(lst)
+    if(page === parseInt(lst)){
+        result.lastPage={
+            page:page,
+            limit:limit
+        }
+    }else{
+        result.nextPage={
+            page:page+1,
+            limit:limit
+        }
     }
-});
-
-var MatchSchema = new Schema({
-    Match_SK: Number,
-    match_id: Number,
-    Team1: String,
-    Team2: String,
-    match_date: Date,
-    Season_Year: Number,
-    Venue_Name: String,
-    City_Name: String,
-    Country_Name: String,
-    Toss_Winner: String,
-    match_winner: String,
-    Toss_Name: String,
-    Win_Type: String,
-    Outcome_Type: String,
-    ManOfMach: String,
-    Win_Margin: String,
-    Country_id: Number
-
-})
-
-const MatchModel = mongoose.model('MatchModel', MatchSchema);
-
-
-db.on('connected', async () => {
-    const MatchModelData = await MatchModel.countDocuments()
-    if (!MatchModelData) {
-        fs.createReadStream('Match.csv')
-            .pipe(csv())
-            .on('data', async (csvMatchData) => {
-
-
-                await MatchModel.insertMany([csvMatchData], (err, res) => {
-                    if (err) throw err;
-                    if (res) {
-                        console.log("data inserted in database");
-                    }
-                });
-
-
-            })
-            .on('end', () => {
-                console.log('CSV file successfully processed');
-            });
-    } else {
-        console.log("Data Already Available match collection:)")
+    
+    if(page === 1){
+        result.firstPage={
+            page:page
+        }
+    }else{
+        result.previousPage={
+            page:page-1,
+            limit:limit
+        }
     }
-});
-
-var BBBSchema = new Schema({
-    MatcH_id: String,
-    Over_id: String,
-    Ball_id: String,
-    Innings_No: String,
-    Team_Batting: String,
-    Team_Bowling: String,
-    Striker_Batting_Position: String,
-    Extra_Type: String,
-    Runs_Scored: String,
-    Extra_runs: String,
-    Wides: String,
-    Legbyes: String,
-    Byes: String, Noballs: String,
-    Penalty: String,
-    Bowler_Extras: String,
-    Out_type: String,
-    Caught: Boolean,
-    Bowled: Boolean,
-    Run_out: Boolean,
-    LBW: Boolean,
-    Retired_hurt: Boolean,
-    Stumped: Boolean,
-    caught_and_bowled: Boolean,
-    hit_wicket: Boolean,
-    ObstructingFeild: Boolean,
-    Bowler_Wicket: Boolean,
-    Match_Date: Date,
-    Season: String,
-    Striker: String,
-    Non_Striker: String,
-    Bowler: String,
-    Player_Out: String,
-    Fielders: String,
-    Striker_match_SK: String,
-    StrikerSK: String,
-    NonStriker_match_SK: String,
-    NONStriker_SK: String,
-    Fielder_match_SK: String,
-    Fielder_SK: String,
-    Bowler_match_SK: String,
-    BOWLER_SK: String,
-    PlayerOut_match_SK: String,
-    BattingTeam_SK: String,
-    BowlingTeam_SK: String,
-    Keeper_Catch: Boolean,
-    Player_out_sk: String,
-    MatchDateSK: String
-
-})
-
-
-
-const BBBModel = mongoose.model('BBBModel', BBBSchema);
-
-
-db.once('open', async () => {
-    const BBBModelData = await BBBModel.countDocuments({})
-    if (!BBBModelData) {
-        csvFile()
-        .fromFile(BBBfile)
-        .then(async jsonObj => {
-            
-          
-            await BBBModel.insertMany(jsonObj)
-            console.log("Item  Inserted")
-        }).then(res => console.log("Delivries Data Added to Delivries Schema"))
-        .catch(err => console.log(err));
-    } else {
-        console.log("Data Already Available Ball BY Ball collection:)")
+    result.currentPage={
+        page:page,
+        limit:limit
     }
-});
+   
 
+     result.matchData = await MatchModel.find({}).limit(limit).skip(skip)
 
+     
 
-
-
-
-app.get("/teamId/:teamId", async(req, res) => {
-    const teamModelData = await TeamModel.find({Team_Id:req.params.teamId},{Team_SK:0,__v:0}).sort({Team_Id:1})
-    console.log("home router",teamModelData)
-    res.status(200).send(teamModelData)
-
+    res.status(200).send(result)
 
 })
 
